@@ -22,6 +22,8 @@ class ResourceMonitor:
         self.duration = duration
         self.output_file = output_file
         self.output_format = output_format
+        if output_file and output_file.lower().endswith('.json'):
+            self.output_format = 'json'
         self.monitoring = False
         self.data = []
 
@@ -179,8 +181,6 @@ def main():
                         help='Total duration of monitoring in seconds')
     parser.add_argument('-o', '--output',
                         help='Output file path to save monitoring data')
-    parser.add_argument('-f', '--format', choices=['csv', 'json'], default='csv',
-                        help='Output file format (default: csv)')
 
     # Parse arguments
     args = parser.parse_args()
@@ -189,8 +189,7 @@ def main():
     monitor = ResourceMonitor(
         interval=args.interval,
         duration=args.duration,
-        output_file=args.output,
-        output_format=args.format
+        output_file=args.output
     )
 
     # Start monitoring
