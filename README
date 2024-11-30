@@ -1,0 +1,95 @@
+# System Resource Monitor CLI
+
+## 🌐 Overview
+
+A powerful Python CLI tool to monitor and log system resources in real-time.
+
+## ✨ Features
+
+- 📊 Monitor system resources:
+  - CPU usage
+  - Memory consumption
+  - Disk usage
+  - Network I/O
+- 🕒 Customizable monitoring interval
+- ⏱️ Optional time-limited monitoring
+- 💾 Export data in CSV or JSON formats
+- 📈 Real-time console output
+
+## 🛠️ Prerequisites
+
+- Python 3.7+
+- `psutil` library
+
+## 🚀 Installation
+
+1. Clone the repository:
+
+    ```bash
+    git clone https://github.com/somenoe/resource-monitor.git
+    cd resource-monitor
+    ```
+
+2. Install required dependencies:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## 💻 Usage Examples
+
+### Basic Monitoring
+
+```bash
+python main.py
+```
+
+- Monitors system resources
+- Prints data to console
+- Updates every 1 second
+
+### Advanced Monitoring Options
+
+1. Custom Interval (5-second snapshots):
+
+    ```bash
+    python main.py -i 5
+    ```
+
+2. Limited Duration (10 minutes):
+
+    ```bash
+    python main.py -d 600
+    ```
+
+3. Save to CSV File:
+
+    ```bash
+    python main.py -o system_resources.csv
+    ```
+
+4. Save to JSON File:
+
+    ```bash
+    python main.py -o system_data.json -f json
+    ```
+
+5. Comprehensive Example:
+
+    ```bash
+    python main.py -i 5 -d 600 -o resources_log.csv
+    ```
+
+## 🔧 Command-line Arguments
+
+| Argument         | Description                     | Default    | Example         |
+|------------------|---------------------------------|------------|-----------------|
+| `-i, --interval` | Seconds between snapshots       | 1          | `-i 5`          |
+| `-d, --duration` | Total monitoring time (seconds) | Continuous | `-d 600`        |
+| `-o, --output`   | Output file path                | None       | `-o system.csv` |
+| `-f, --format`   | Output file format              | csv        | `-f json`       |
+
+## 📋 Output Formats
+
+- **CSV**: Tabular data with column headers
+- **JSON**: Structured data for easy parsing
