@@ -4,16 +4,16 @@
 
 A Python CLI tool that monitors and logs system resources in real-time, providing comprehensive metrics for CPU, memory, disk, and GPU usage.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ## Features
 
-- Real-time system resource monitoring
-  - CPU usage tracking
-  - Memory metrics
-  - Disk usage and I/O
-  - GPU performance metrics
-- Configurable monitoring parameters
-- Data export capabilities
-- Console-based visualization
+- Real-time system resource monitoring:
+  - CPU utilization tracking
+  - Memory usage and statistics
+  - Disk usage, I/O metrics
+  - GPU performance monitoring
+  - Interactive console display
 
 ## Installation
 
