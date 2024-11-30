@@ -10,15 +10,11 @@ A powerful Python CLI tool to monitor and log system resources in real-time.
   - CPU usage
   - Memory consumption
   - Network I/O
+  - GPU metrics (temperature, memory usage, load)
 - 🕒 Customizable monitoring interval
 - ⏱️ Optional time-limited monitoring
 - 💾 Export data in CSV or JSON formats
 - 📈 Real-time console output
-
-## 🛠️ Prerequisites
-
-- Python 3.7+
-- `psutil` library
 
 ## 🚀 Installation
 
@@ -81,14 +77,26 @@ python main.py
 
 ## 🔧 Command-line Arguments
 
-| Argument         | Description                     | Default    | Example         |
-|------------------|---------------------------------|------------|-----------------|
-| `-i, --interval` | Seconds between snapshots       | 1          | `-i 5`          |
-| `-d, --duration` | Total monitoring time (seconds) | Continuous | `-d 600`        |
-| `-o, --output`   | Output file path                | None       | `-o system.csv` |
-| `-f, --format`   | Output file format              | csv        | `-f json`       |
+| Argument         | Description                     | Default                                  | Example         |
+|------------------|---------------------------------|------------------------------------------|-----------------|
+| `-i, --interval` | Seconds between snapshots       | 1                                        | `-i 5`          |
+| `-d, --duration` | Total monitoring time (seconds) | Continuous                               | `-d 600`        |
+| `-o, --output`   | Output file path                | ./data/resource-monitor-[TIMESTAMP].csv  | `-o system.csv` |
+| `-f, --format`   | Output file format              | csv                                      | `-f json`       |
 
-## 📋 Output Formats
+## 📋 Output Data
 
-- **CSV**: Tabular data with column headers
-- **JSON**: Structured data for easy parsing
+The monitor collects the following metrics:
+
+### System Metrics
+
+- CPU usage percentage
+- Memory usage (total, available, used, percentage)
+- Network I/O (bytes sent/received)
+
+### GPU Metrics
+
+- GPU name
+- GPU load percentage
+- GPU memory (total, used, free, utilization)
+- GPU temperature
