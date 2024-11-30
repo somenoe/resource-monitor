@@ -7,6 +7,7 @@ import argparse
 import threading
 from datetime import datetime
 import GPUtil
+import os
 
 class ResourceMonitor:
     def __init__(self, interval=1, duration=None, output_file=None, output_format='csv'):
@@ -172,6 +173,10 @@ class ResourceMonitor:
         with open(self.output_file, 'w') as jsonfile:
             json.dump(self.data, jsonfile, indent=2)
 
+def ensure_data_directory():
+    """Create data directory if it doesn't exist"""
+    os.makedirs('./data', exist_ok=True)
+
 def main():
     # Create argument parser
     parser = argparse.ArgumentParser(description='System Resource Monitor')
@@ -180,10 +185,16 @@ def main():
     parser.add_argument('-d', '--duration', type=float,
                         help='Total duration of monitoring in seconds')
     parser.add_argument('-o', '--output',
-                        help='Output file path to save monitoring data')
+                        help='Output file path to save monitoring data (default: ./data/resource-monitor-<timestamp>.csv)')
 
     # Parse arguments
     args = parser.parse_args()
+
+    # Create default output path if none specified
+    if not args.output:
+        ensure_data_directory()
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        args.output = f'./data/resource-monitor-{timestamp}.csv'
 
     # Create and start resource monitor
     monitor = ResourceMonitor(
