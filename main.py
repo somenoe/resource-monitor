@@ -384,7 +384,8 @@ class ResourceMonitor:
 
             # Create fieldnames
             fieldnames = ['timestamp', 'cpu_percent', 'memory_total', 'memory_available',
-                         'memory_used', 'memory_percent', 'net_bytes_sent', 'net_bytes_recv']
+                         'memory_used', 'memory_percent', 'net_bytes_sent', 'net_bytes_recv',
+                         'net_speed_up', 'net_speed_down']  # Added network speed fields
             fieldnames.extend(sorted(disk_fields))
 
             # Add GPU fields only if GPU data exists
