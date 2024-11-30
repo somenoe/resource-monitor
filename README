@@ -1,121 +1,70 @@
 # System Resource Monitor CLI
 
-## 🌐 Overview
+## Overview
 
-A powerful Python CLI tool to monitor and log system resources in real-time.
+A Python CLI tool that monitors and logs system resources in real-time, providing comprehensive metrics for CPU, memory, disk, network, and GPU usage.
 
-## ✨ Features
+## Features
 
-- 📊 Monitor system resources:
-  - CPU usage percentage
-  - Memory metrics (total, available, used, percentage)
-  - Disk metrics:
-    - Usage (total, used, free, percentage)
-    - I/O speeds (read/write in MB/s)
-    - Mount points and filesystem types
-  - Network I/O (bytes sent/received)
-  - GPU metrics:
-    - Name and load
-    - Memory usage and utilization
-    - Temperature
-- 🕒 Configurable monitoring interval
-- ⏱️ Optional duration-based monitoring
-- 💾 CSV data export with timestamps
-- 📈 Real-time console output with formatted display
+- Real-time system resource monitoring
+  - CPU usage tracking
+  - Memory metrics
+  - Disk usage and I/O
+  - Network I/O statistics
+  - GPU performance metrics
+- Configurable monitoring parameters
+- Data export capabilities
+- Console-based visualization
 
-## 🚀 Installation
+## Installation
 
-1. Clone the repository:
+```bash
+git clone https://github.com/somenoe/resource-monitor.git
+cd resource-monitor
+pip install -r requirements.txt
+```
 
-    ```bash
-    git clone https://github.com/somenoe/resource-monitor.git
-    cd resource-monitor
-    ```
+## Usage
 
-2. Install required dependencies:
-
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-## 💻 Usage Examples
-
-### Basic Monitoring
+Basic command:
 
 ```bash
 python main.py
 ```
 
-- Monitors system resources
-- Prints data to console
-- Updates every 1 second
+Advanced options:
 
-### Advanced Monitoring Options
+```bash
+python main.py -i 5 -d 600 -o resources_log.csv
+```
 
-1. Custom Interval (5-second snapshots):
+### Command Arguments
 
-    ```bash
-    python main.py -i 5
-    ```
+| Argument | Purpose           | Default                                 |
+|----------|-------------------|-----------------------------------------|
+| `-i`     | Sampling interval | 1s                                      |
+| `-d`     | Duration          | Continuous                              |
+| `-o`     | Output file       | ./data/resource-monitor-[TIMESTAMP].csv |
 
-2. Limited Duration (10 minutes):
-
-    ```bash
-    python main.py -d 600
-    ```
-
-3. Save to CSV File:
-
-    ```bash
-    python main.py -o system_resources.csv
-    ```
-
-4. Comprehensive Example:
-
-    ```bash
-    python main.py -i 5 -d 600 -o resources_log.csv
-    ```
-
-## 🔧 Command-line Arguments
-
-| Argument         | Description                     | Default                                  | Example         |
-|------------------|---------------------------------|------------------------------------------|-----------------|
-| `-i, --interval` | Seconds between snapshots       | 1                                        | `-i 5`          |
-| `-d, --duration` | Total monitoring time (seconds) | None (continuous)                        | `-d 600`        |
-| `-o, --output`   | Output file path                | ./data/resource-monitor-[TIMESTAMP].csv  | `-o system.csv` |
-
-## 📋 Output Data
-
-The monitor collects the following metrics, saved in CSV format:
+## Data Output
 
 ### System Metrics
 
-- Timestamp (ISO format)
-- CPU usage percentage
-- Memory metrics:
-  - Total memory (bytes)
-  - Available memory (bytes)
-  - Used memory (bytes)
-  - Usage percentage
-- Network I/O:
-  - Bytes sent
-  - Bytes received
-- Disk metrics (per disk, e.g., C:, D:):
-  - Total space (bytes)
-  - Used space (bytes)
-  - Free space (bytes)
-  - Usage percentage
-  - Read speed (bytes/s)
-  - Write speed (bytes/s)
+- CPU utilization
+- Memory statistics
+- Network I/O
+- Disk metrics
 
-### GPU Metrics (if available)
+### GPU Metrics
 
-- GPU name
-- Load (percentage)
-- Memory total (MB)
-- Memory used (MB)
-- Memory free (MB)
-- Memory utilization (percentage)
-- Temperature (°C)
+- Usage statistics
+- Memory utilization
+- Temperature monitoring
 
-> Note: Disk metrics are prefixed with `disk_[DriveLetter]_` in the CSV output
+## Contributing
+
+Please submit issues and pull requests on GitHub.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
