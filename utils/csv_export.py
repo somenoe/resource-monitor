@@ -15,7 +15,6 @@ class DataExporter:
 
                 for row in data:
                     writer.writerow(DataExporter._prepare_row(row))
-            print(f"Data successfully saved to {output_file}")
         except Exception as e:
             print(f"Error saving data: {str(e)}")
 

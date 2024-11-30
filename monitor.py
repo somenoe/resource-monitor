@@ -17,22 +17,29 @@ from utils.formatters import *
 OUTPUT_SEPARATOR = '\n'
 DISK_INDENT = '  '
 GPU_INDENT = '    '
+AUTO_SAVE_INTERVAL = 60
 
 class ResourceMonitor:
     def __init__(self, interval=DEFAULT_INTERVAL, duration=None, output_file=None):
         self.interval = interval
         self.duration = duration
-        self.output_file = output_file
+        self.start_time = datetime.now()
+        self.output_file = output_file or self._get_default_filename()
         self.monitoring = False
         self.data = []
         self.last_line_count = 0
         self.should_stop = False
+        self.last_save_time = time.time()
 
         # Initialize collectors
         self.disk_collector = DiskCollector()
         self.gpu_collector = GPUCollector()
         self.network_collector = NetworkCollector()
         self.screen_manager = ScreenManager()
+
+    def _get_default_filename(self):
+        """Generate default filename using start time"""
+        return f"resource_monitor_{self.start_time.strftime('%Y%m%d_%H%M%S')}.csv"
 
     def _collect_resource_data(self):
         """Collect current snapshot of system resource usage"""
@@ -152,11 +159,17 @@ class ResourceMonitor:
                 self.data.append(resource_data)
                 self._print_current_snapshot(resource_data)
 
+                # Auto-save check
+                current_time = time.time()
+                if current_time - self.last_save_time >= AUTO_SAVE_INTERVAL:
+                    self._save_data()
+                    self.last_save_time = current_time
+
                 if self._check_for_quit():
                     print("\nMonitoring stopped by user ('q' pressed).")
                     break
 
-                if self.duration and (time.time() - start_time) >= self.duration:
+                if self.duration and (current_time - start_time) >= self.duration:
                     break
 
                 time.sleep(self.interval)
@@ -165,8 +178,7 @@ class ResourceMonitor:
             print("\nMonitoring stopped by user (Ctrl+C).")
         finally:
             self.monitoring = False
-            if self.output_file:
-                self._save_data()
+            self._save_data()  # Final save when monitoring stops
 
     def _save_data(self):
         """Save collected resource data"""
@@ -175,6 +187,11 @@ class ResourceMonitor:
             return
 
         try:
+            file_exists = os.path.exists(self.output_file)
             DataExporter.save_to_csv(self.data, self.output_file)
+            if file_exists:
+                print(f"\nUpdated data in: {self.output_file}")
+            else:
+                print(f"\nCreated new file: {self.output_file}")
         except Exception as e:
-            print(f"Error saving data: {e}")
+            print(f"\nError saving data: {e}")
