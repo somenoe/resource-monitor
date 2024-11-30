@@ -2,7 +2,7 @@
 
 ## Overview
 
-A Python CLI tool that monitors and logs system resources in real-time, providing comprehensive metrics for CPU, memory, disk, network, and GPU usage.
+A Python CLI tool that monitors and logs system resources in real-time, providing comprehensive metrics for CPU, memory, disk, and GPU usage.
 
 ## Features
 
@@ -10,7 +10,6 @@ A Python CLI tool that monitors and logs system resources in real-time, providin
   - CPU usage tracking
   - Memory metrics
   - Disk usage and I/O
-  - Network I/O statistics
   - GPU performance metrics
 - Configurable monitoring parameters
 - Data export capabilities
@@ -52,7 +51,6 @@ python main.py -i 5 -d 600 -o resources_log.csv
 
 - CPU utilization
 - Memory statistics
-- Network I/O
 - Disk metrics
 
 ### GPU Metrics
