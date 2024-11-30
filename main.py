@@ -259,10 +259,10 @@ class ResourceMonitor:
 
     def _collect_gpu_data(self):
         """
-        Collect GPU usage statistics if available
+        Collect GPU usage statistics for all available GPUs
 
         Returns:
-            dict: GPU usage statistics or None if GPU is not available
+            list: List of GPU usage statistics or None if GPU is not available
         """
         if not self.has_gpu:
             return None
@@ -273,8 +273,8 @@ class ResourceMonitor:
                 self.has_gpu = False
                 return None
 
-            gpu = gpus[0]  # Get first GPU
-            return {
+            return [{
+                'index': gpu.id,
                 'name': gpu.name,
                 'load': gpu.load * 100,
                 'memory_total': gpu.memoryTotal,
@@ -282,7 +282,7 @@ class ResourceMonitor:
                 'memory_free': gpu.memoryFree,
                 'memory_util': gpu.memoryUtil * 100,
                 'temperature': gpu.temperature
-            }
+            } for gpu in gpus]
         except:
             self.has_gpu = False
             return None
@@ -322,11 +322,12 @@ class ResourceMonitor:
             lines.append("")
 
         if data['gpu_data']:
-            gpu = data['gpu_data']
-            lines.append(f"GPU ({gpu['name']}):")
-            lines.append(f"  Load: {int(gpu['load']):,}%")
-            lines.append(f"  Memory Used: {int(gpu['memory_used']):,} MB / {int(gpu['memory_total']):,} MB ({int(gpu['memory_util']):,}%)")
-            lines.append(f"  Temperature: {int(gpu['temperature']):,}°C")
+            lines.append("GPUs:")
+            for gpu in data['gpu_data']:
+                lines.append(f"  GPU {gpu['index']} ({gpu['name']}):")
+                lines.append(f"    Load: {int(gpu['load']):,}%")
+                lines.append(f"    Memory Used: {int(gpu['memory_used']):,} MB / {int(gpu['memory_total']):,} MB ({int(gpu['memory_util']):,}%)")
+                lines.append(f"    Temperature: {int(gpu['temperature']):,}°C")
 
         print('\n'.join(lines))
         self.last_line_count = len(lines)
@@ -422,7 +423,11 @@ class ResourceMonitor:
 
             # Add GPU fields only if GPU data exists
             if self.data[0]['gpu_data']:
-                fieldnames.extend([f'gpu_{key}' for key in self.data[0]['gpu_data'].keys()])
+                gpu_metrics = ['index', 'name', 'load', 'memory_total', 'memory_used',
+                             'memory_free', 'memory_util', 'temperature']
+                gpu_count = len(self.data[0]['gpu_data'])
+                for i in range(gpu_count):
+                    fieldnames.extend([f'gpu{i}_{key}' for key in gpu_metrics])
 
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
@@ -442,8 +447,9 @@ class ResourceMonitor:
 
                 # Add GPU data if available
                 if row['gpu_data']:
-                    for key, value in row['gpu_data'].items():
-                        row_data[f'gpu_{key}'] = value
+                    for i, gpu in enumerate(row['gpu_data']):
+                        for key, value in gpu.items():
+                            row_data[f'gpu{i}_{key}'] = value
 
                 writer.writerow(row_data)
 
