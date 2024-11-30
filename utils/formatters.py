@@ -1,22 +1,44 @@
+from datetime import datetime
 
 # Constants
-BYTES_TO_GB = 1024 * 1024 * 1024  # 1 GB in bytes
-DEFAULT_INTERVAL = 1.0  # Default monitoring interval in seconds
+BYTES_TO_GB = 1024 * 1024 * 1024
+BYTES_TO_MB = 1024 * 1024
+SEPARATOR_LINE = '-' * 40
+DEFAULT_INTERVAL = 1
 
-def format_timestamp(timestamp):
-    """Format ISO timestamp to readable format"""
-    return timestamp.replace('T', ' ').split('.')[0]
+# ...existing code from utils.py...
+def format_timestamp(timestamp_str):
+    """Convert ISO timestamp to readable local time"""
+    dt = datetime.fromisoformat(timestamp_str)
+    return dt.strftime('%Y-%m-%d %I:%M:%S %p')
 
-def format_number(num):
-    """Format number to 2 decimal places"""
-    return f"{num:.2f}"
+def format_number(value, precision=2):
+    """Format number with fixed precision and thousand separators"""
+    formatted = f"{value:.{precision}f}"
+    parts = formatted.split('.')
+    parts[0] = f"{int(parts[0]):,}"
+    return '.'.join(parts)
 
 def format_speed(bytes_per_sec):
-    """Format bytes per second to appropriate unit"""
-    if bytes_per_sec >= BYTES_TO_GB:
-        return f"{bytes_per_sec / BYTES_TO_GB:.2f} GB/s"
-    elif bytes_per_sec >= 1024 * 1024:
-        return f"{bytes_per_sec / (1024 * 1024):.2f} MB/s"
-    elif bytes_per_sec >= 1024:
-        return f"{bytes_per_sec / 1024:.2f} KB/s"
-    return f"{bytes_per_sec:.2f} B/s"
+    """Format speed with appropriate unit and thousand separators"""
+    units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+    unit_index = 0
+    value = float(bytes_per_sec)
+
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    return f"{format_number(value)} {units[unit_index]}"
+
+def format_bytes(bytes_value):
+    """Format bytes with appropriate unit and thousand separators"""
+    units = ['B', 'KB', 'MB', 'GB', 'TB']
+    unit_index = 0
+    value = float(bytes_value)
+
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    return f"{format_number(value)} {units[unit_index]}"
