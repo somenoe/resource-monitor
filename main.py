@@ -43,19 +43,16 @@ class ResourceMonitor:
         net_io = psutil.net_io_counters()
 
         # GPU Usage
-        gpus = GPUtil.getGPUs()
-        gpu_data = []
-        for gpu in gpus:
-            gpu_data.append({
-                'id': gpu.id,
-                'name': gpu.name,
-                'load': gpu.load * 100,
-                'memory_total': gpu.memoryTotal,
-                'memory_used': gpu.memoryUsed,
-                'memory_free': gpu.memoryFree,
-                'memory_util': gpu.memoryUtil * 100,
-                'temperature': gpu.temperature
-            })
+        gpu = GPUtil.getGPUs()[0]  # Assume only one GPU
+        gpu_data = {
+            'name': gpu.name,
+            'load': gpu.load * 100,
+            'memory_total': gpu.memoryTotal,
+            'memory_used': gpu.memoryUsed,
+            'memory_free': gpu.memoryFree,
+            'memory_util': gpu.memoryUtil * 100,
+            'temperature': gpu.temperature
+        }
 
         return {
             'timestamp': timestamp,
@@ -114,11 +111,11 @@ class ResourceMonitor:
         print(f"Timestamp: {data['timestamp']}")
         print(f"CPU Usage: {data['cpu_percent']}%")
         print(f"Memory Used: {data['memory_used'] / (1024*1024*1024):.2f} GB ({data['memory_percent']}%)")
-        for gpu in data['gpu_data']:
-            print(f"GPU {gpu['id']} ({gpu['name']}):")
-            print(f"  Load: {gpu['load']}%")
-            print(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
-            print(f"  Temperature: {gpu['temperature']}°C")
+        gpu = data['gpu_data']
+        print(f"GPU ({gpu['name']}):")
+        print(f"  Load: {gpu['load']}%")
+        print(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
+        print(f"  Temperature: {gpu['temperature']}°C")
         print("-" * 40)
 
     def _save_data(self):
@@ -148,14 +145,23 @@ class ResourceMonitor:
         """
         with open(self.output_file, 'w', newline='') as csvfile:
             # Use first data point's keys as fieldnames
-            fieldnames = self.data[0].keys()
+            fieldnames = list(self.data[0].keys())
+            fieldnames.remove('gpu_data')  # Remove gpu_data key
+            # Add GPU-specific fields
+            gpu_fieldnames = ['gpu_{}'.format(key) for key in self.data[0]['gpu_data'].keys()]
+            fieldnames.extend(gpu_fieldnames)
+
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
             # Write header
             writer.writeheader()
 
             # Write data rows
-            writer.writerows(self.data)
+            for row in self.data:
+                row_data = {key: row[key] for key in row if key != 'gpu_data'}
+                for key, value in row['gpu_data'].items():
+                    row_data['gpu_{}'.format(key)] = value
+                writer.writerow(row_data)
 
     def _save_json(self):
         """
