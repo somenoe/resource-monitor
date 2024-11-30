@@ -6,6 +6,7 @@ import json
 import argparse
 import threading
 from datetime import datetime
+import GPUtil
 
 class ResourceMonitor:
     def __init__(self, interval=1, duration=None, output_file=None, output_format='csv'):
@@ -41,6 +42,21 @@ class ResourceMonitor:
         # Network I/O
         net_io = psutil.net_io_counters()
 
+        # GPU Usage
+        gpus = GPUtil.getGPUs()
+        gpu_data = []
+        for gpu in gpus:
+            gpu_data.append({
+                'id': gpu.id,
+                'name': gpu.name,
+                'load': gpu.load * 100,
+                'memory_total': gpu.memoryTotal,
+                'memory_used': gpu.memoryUsed,
+                'memory_free': gpu.memoryFree,
+                'memory_util': gpu.memoryUtil * 100,
+                'temperature': gpu.temperature
+            })
+
         return {
             'timestamp': timestamp,
             'cpu_percent': cpu_percent,
@@ -49,7 +65,8 @@ class ResourceMonitor:
             'memory_used': memory.used,
             'memory_percent': memory.percent,
             'net_bytes_sent': net_io.bytes_sent,
-            'net_bytes_recv': net_io.bytes_recv
+            'net_bytes_recv': net_io.bytes_recv,
+            'gpu_data': gpu_data
         }
 
     def start_monitoring(self):
@@ -97,6 +114,11 @@ class ResourceMonitor:
         print(f"Timestamp: {data['timestamp']}")
         print(f"CPU Usage: {data['cpu_percent']}%")
         print(f"Memory Used: {data['memory_used'] / (1024*1024*1024):.2f} GB ({data['memory_percent']}%)")
+        for gpu in data['gpu_data']:
+            print(f"GPU {gpu['id']} ({gpu['name']}):")
+            print(f"  Load: {gpu['load']}%")
+            print(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
+            print(f"  Temperature: {gpu['temperature']}°C")
         print("-" * 40)
 
     def _save_data(self):
