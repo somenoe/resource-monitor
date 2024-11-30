@@ -8,61 +8,232 @@ from datetime import datetime
 import GPUtil
 import os
 
+# Constants
+BYTES_TO_GB = 1024 * 1024 * 1024
+BYTES_TO_MB = 1024 * 1024
+DEFAULT_INTERVAL = 1
+DATA_DIRECTORY = './data'
+SEPARATOR_LINE = '-' * 40
+
 class ResourceMonitor:
-    def __init__(self, interval=1, duration=None, output_file=None):
+    def __init__(self, interval=DEFAULT_INTERVAL, duration=None, output_file=None):
         """
         Initialize the Resource Monitor
 
-        :param interval: Seconds between each monitoring snapshot
-        :param duration: Total duration to monitor (None for continuous)
-        :param output_file: Path to save the output file
+        Args:
+            interval (float): Seconds between each monitoring snapshot
+            duration (float, optional): Total duration to monitor in seconds
+            output_file (str, optional): Path to save the output CSV file
+
+        The monitor tracks CPU, memory, disk I/O, network, and GPU (if available) usage.
         """
         self.interval = interval
         self.duration = duration
         self.output_file = output_file
         self.monitoring = False
         self.data = []
+        # Track IO for all disks
+        self.last_disk_io = {}
+        self.disk_map = {}
+
+        # Get initial disk I/O counters
+        disk_io = psutil.disk_io_counters(perdisk=True)
+        print("Available disk IO counters:", list(disk_io.keys()))  # Debug print
+
+        # Map physical disks to partitions
+        for partition in psutil.disk_partitions(all=False):
+            try:
+                if os.name == 'nt':  # Windows
+                    # On Windows, map PhysicalDrive numbers to drive letters
+                    for io_name in disk_io.keys():
+                        if io_name.startswith('PhysicalDrive'):
+                            self.disk_map[partition.device] = io_name
+                            self.last_disk_io[partition.device] = {
+                                'io': disk_io[io_name],
+                                'time': time.time()
+                            }
+                            break
+                else:  # Linux/Unix
+                    # On Linux, use device name without partition number
+                    base_device = partition.device.rstrip('0123456789')
+                    device_name = base_device.split('/')[-1]
+                    if device_name in disk_io:
+                        self.disk_map[partition.device] = device_name
+                        self.last_disk_io[partition.device] = {
+                            'io': disk_io[device_name],
+                            'time': time.time()
+                        }
+            except Exception as e:
+                print(f"Error mapping disk {partition.device}: {e}")
+
+        print("Disk mapping:", self.disk_map)  # Debug print
+
+        self.has_gpu = True  # Will be set to False if GPU is not available
+        try:
+            GPUtil.getGPUs()
+        except:
+            self.has_gpu = False
+            print("No GPU detected - GPU monitoring disabled")
+
+    def _collect_disk_data(self):
+        """
+        Collect disk usage and I/O statistics for all mounted disks
+
+        Returns:
+            dict: Disk statistics including usage and I/O speeds
+        """
+        disk_data = {}
+        try:
+            current_disk_io = psutil.disk_io_counters(perdisk=True)
+        except Exception as e:
+            print(f"Error getting disk I/O counters: {str(e)}")
+            current_disk_io = {}
+        current_time = time.time()
+
+        for disk in psutil.disk_partitions(all=False):
+            disk_data[disk.device] = self._process_disk_metrics(disk, current_disk_io, current_time)
+
+        return disk_data
+
+    def _process_disk_metrics(self, disk, current_disk_io, current_time):
+        """
+        Process metrics for a single disk
+
+        Args:
+            disk: Disk partition information
+            current_disk_io: Current disk I/O counters
+            current_time: Current timestamp
+
+        Returns:
+            dict: Processed disk metrics
+        """
+        try:
+            usage = psutil.disk_usage(disk.mountpoint)
+            disk_info = {
+                'total': usage.total,
+                'used': usage.used,
+                'free': usage.free,
+                'percent': usage.percent,
+                'mountpoint': disk.mountpoint,
+                'fstype': disk.fstype,
+                'read_speed': 0,
+                'write_speed': 0
+            }
+
+            if disk.device in self.disk_map:
+                disk_info.update(
+                    self._calculate_disk_io_speeds(
+                        disk.device,
+                        current_disk_io,
+                        current_time
+                    )
+                )
+
+            return disk_info
+        except Exception as e:
+            print(f"Error processing disk {disk.device}: {str(e)}")
+            return None
+
+    def _calculate_disk_io_speeds(self, device, current_disk_io, current_time):
+        """Calculate disk I/O speeds for a given device"""
+        io_name = self.disk_map[device]
+        if io_name not in current_disk_io or device not in self.last_disk_io:
+            return {'read_speed': 0, 'write_speed': 0}
+
+        current_io = current_disk_io[io_name]
+        last_io = self.last_disk_io[device]['io']
+        io_time_diff = current_time - self.last_disk_io[device]['time']
+
+        if io_time_diff <= 0:
+            return {'read_speed': 0, 'write_speed': 0}
+
+        read_speed = max(0, (current_io.read_bytes - last_io.read_bytes) / io_time_diff)
+        write_speed = max(0, (current_io.write_bytes - last_io.write_bytes) / io_time_diff)
+
+        # Update last values
+        self.last_disk_io[device]['io'] = current_io
+        self.last_disk_io[device]['time'] = current_time
+
+        return {
+            'read_speed': read_speed,
+            'write_speed': write_speed
+        }
 
     def _collect_resource_data(self):
         """
-        Collect current system resource data
+        Collect current system resource data including CPU, memory, disk, network, and GPU metrics
 
-        :return: Dictionary with current system resource metrics
+        Returns:
+            dict: Current system resource metrics
         """
         timestamp = datetime.now().isoformat()
 
-        # CPU Usage
-        cpu_percent = psutil.cpu_percent(interval=None)
-
-        # Memory Usage
-        memory = psutil.virtual_memory()
-
-        # Network I/O
-        net_io = psutil.net_io_counters()
-
-        # GPU Usage
-        gpu = GPUtil.getGPUs()[0]  # Assume only one GPU
-        gpu_data = {
-            'name': gpu.name,
-            'load': gpu.load * 100,
-            'memory_total': gpu.memoryTotal,
-            'memory_used': gpu.memoryUsed,
-            'memory_free': gpu.memoryFree,
-            'memory_util': gpu.memoryUtil * 100,
-            'temperature': gpu.temperature
-        }
-
         return {
             'timestamp': timestamp,
-            'cpu_percent': cpu_percent,
+            'cpu_percent': psutil.cpu_percent(interval=None),
+            **self._collect_memory_data(),
+            'disks': self._collect_disk_data(),
+            **self._collect_network_data(),
+            'gpu_data': self._collect_gpu_data()
+        }
+
+    def _collect_memory_data(self):
+        """
+        Collect memory usage statistics
+
+        Returns:
+            dict: Memory usage statistics
+        """
+        memory = psutil.virtual_memory()
+        return {
             'memory_total': memory.total,
             'memory_available': memory.available,
             'memory_used': memory.used,
-            'memory_percent': memory.percent,
-            'net_bytes_sent': net_io.bytes_sent,
-            'net_bytes_recv': net_io.bytes_recv,
-            'gpu_data': gpu_data
+            'memory_percent': memory.percent
         }
+
+    def _collect_network_data(self):
+        """
+        Collect network I/O statistics
+
+        Returns:
+            dict: Network I/O statistics
+        """
+        net_io = psutil.net_io_counters()
+        return {
+            'net_bytes_sent': net_io.bytes_sent,
+            'net_bytes_recv': net_io.bytes_recv
+        }
+
+    def _collect_gpu_data(self):
+        """
+        Collect GPU usage statistics if available
+
+        Returns:
+            dict: GPU usage statistics or None if GPU is not available
+        """
+        if not self.has_gpu:
+            return None
+
+        try:
+            gpus = GPUtil.getGPUs()
+            if not gpus:
+                self.has_gpu = False
+                return None
+
+            gpu = gpus[0]  # Get first GPU
+            return {
+                'name': gpu.name,
+                'load': gpu.load * 100,
+                'memory_total': gpu.memoryTotal,
+                'memory_used': gpu.memoryUsed,
+                'memory_free': gpu.memoryFree,
+                'memory_util': gpu.memoryUtil * 100,
+                'temperature': gpu.temperature
+            }
+        except:
+            self.has_gpu = False
+            return None
 
     def start_monitoring(self):
         """
@@ -108,13 +279,21 @@ class ResourceMonitor:
         """
         print(f"Timestamp: {data['timestamp']}")
         print(f"CPU Usage: {data['cpu_percent']}%")
-        print(f"Memory Used: {data['memory_used'] / (1024*1024*1024):.2f} GB ({data['memory_percent']}%)")
-        gpu = data['gpu_data']
-        print(f"GPU ({gpu['name']}):")
-        print(f"  Load: {gpu['load']}%")
-        print(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
-        print(f"  Temperature: {gpu['temperature']}°C")
-        print("-" * 40)
+        print(f"Memory Used: {data['memory_used'] / BYTES_TO_GB:.2f} GB ({data['memory_percent']}%)")
+
+        print("\nDisk Usage:")
+        for device, disk in data['disks'].items():
+            print(f"\n{device} ({disk['mountpoint']}, {disk['fstype']}):")
+            print(f"  Usage: {disk['used'] / BYTES_TO_GB:.2f} GB / {disk['total'] / BYTES_TO_GB:.2f} GB ({disk['percent']}%)")
+            print(f"  I/O: Read: {disk['read_speed'] / BYTES_TO_MB:.2f} MB/s, Write: {disk['write_speed'] / BYTES_TO_MB:.2f} MB/s")
+
+        if data['gpu_data']:
+            gpu = data['gpu_data']
+            print(f"\nGPU ({gpu['name']}):")
+            print(f"  Load: {gpu['load']}%")
+            print(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
+            print(f"  Temperature: {gpu['temperature']}°C")
+        print(SEPARATOR_LINE)
 
     def _save_data(self):
         """
@@ -135,54 +314,78 @@ class ResourceMonitor:
         Save data to CSV file
         """
         with open(self.output_file, 'w', newline='') as csvfile:
-            # Use first data point's keys as fieldnames
-            fieldnames = list(self.data[0].keys())
-            fieldnames.remove('gpu_data')  # Remove gpu_data key
-            # Add GPU-specific fields
-            gpu_fieldnames = ['gpu_{}'.format(key) for key in self.data[0]['gpu_data'].keys()]
-            fieldnames.extend(gpu_fieldnames)
+            # Get all possible disk fields from the first data point
+            disk_fields = set()
+            for disk in self.data[0]['disks'].keys():
+                for metric in ['total', 'used', 'free', 'percent', 'read_speed', 'write_speed']:
+                    disk_fields.add(f"disk_{disk.replace(':', '')}_{metric}")
+
+            # Create fieldnames
+            fieldnames = ['timestamp', 'cpu_percent', 'memory_total', 'memory_available',
+                         'memory_used', 'memory_percent', 'net_bytes_sent', 'net_bytes_recv']
+            fieldnames.extend(sorted(disk_fields))
+
+            # Add GPU fields only if GPU data exists
+            if self.data[0]['gpu_data']:
+                fieldnames.extend([f'gpu_{key}' for key in self.data[0]['gpu_data'].keys()])
 
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-            # Write header
             writer.writeheader()
 
-            # Write data rows
             for row in self.data:
-                row_data = {key: row[key] for key in row if key != 'gpu_data'}
-                for key, value in row['gpu_data'].items():
-                    row_data['gpu_{}'.format(key)] = value
+                row_data = {
+                    key: row[key] for key in row
+                    if key not in ['disks', 'gpu_data']
+                }
+
+                # Add disk data
+                for disk, disk_data in row['disks'].items():
+                    disk_key = disk.replace(':', '')
+                    for metric, value in disk_data.items():
+                        if metric not in ['mountpoint', 'fstype']:
+                            row_data[f'disk_{disk_key}_{metric}'] = value
+
+                # Add GPU data if available
+                if row['gpu_data']:
+                    for key, value in row['gpu_data'].items():
+                        row_data[f'gpu_{key}'] = value
+
                 writer.writerow(row_data)
 
 def ensure_data_directory():
     """Create data directory if it doesn't exist"""
-    os.makedirs('./data', exist_ok=True)
+    os.makedirs(DATA_DIRECTORY, exist_ok=True)
 
-def main():
+def create_output_filepath():
+    """Create a default output filepath with timestamp"""
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    return os.path.join(DATA_DIRECTORY, f'resource-monitor-{timestamp}.csv')
+
+def parse_arguments():
+    """Parse and validate command line arguments"""
     parser = argparse.ArgumentParser(description='System Resource Monitor')
-    parser.add_argument('-i', '--interval', type=float, default=1,
-                        help='Interval between monitoring snapshots in seconds (default: 1)')
+    parser.add_argument('-i', '--interval', type=float, default=DEFAULT_INTERVAL,
+                      help=f'Interval between monitoring snapshots in seconds (default: {DEFAULT_INTERVAL})')
     parser.add_argument('-d', '--duration', type=float,
-                        help='Total duration of monitoring in seconds')
+                      help='Total duration of monitoring in seconds')
     parser.add_argument('-o', '--output',
-                        help='Output file path to save monitoring data (default: ./data/resource-monitor-<timestamp>.csv)')
+                      help='Output file path to save monitoring data')
 
     args = parser.parse_args()
 
-    # Create default output path if none specified
     if not args.output:
         ensure_data_directory()
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        args.output = f'./data/resource-monitor-{timestamp}.csv'
+        args.output = create_output_filepath()
 
-    # Create and start resource monitor
+    return args
+
+def main():
+    args = parse_arguments()
     monitor = ResourceMonitor(
         interval=args.interval,
         duration=args.duration,
         output_file=args.output
     )
-
-    # Start monitoring
     monitor.start_monitoring()
 
 if __name__ == '__main__':
