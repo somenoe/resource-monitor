@@ -7,14 +7,17 @@ A powerful Python CLI tool to monitor and log system resources in real-time.
 ## ✨ Features
 
 - 📊 Monitor system resources:
-  - CPU usage
-  - Memory consumption
-  - Network I/O
-  - GPU metrics (temperature, memory usage, load)
-- 🕒 Customizable monitoring interval
-- ⏱️ Optional time-limited monitoring
-- 💾 Export data in CSV or JSON formats
-- 📈 Real-time console output
+  - CPU usage percentage
+  - Memory metrics (total, available, used, percentage)
+  - Network I/O (bytes sent/received)
+  - GPU metrics:
+    - Name and load
+    - Memory usage and utilization
+    - Temperature
+- 🕒 Configurable monitoring interval
+- ⏱️ Optional duration-based monitoring
+- 💾 CSV data export with timestamps
+- 📈 Real-time console output with formatted display
 
 ## 🚀 Installation
 
@@ -63,13 +66,7 @@ python main.py
     python main.py -o system_resources.csv
     ```
 
-4. Save to JSON File:
-
-    ```bash
-    python main.py -o system_data.json -f json
-    ```
-
-5. Comprehensive Example:
+4. Comprehensive Example:
 
     ```bash
     python main.py -i 5 -d 600 -o resources_log.csv
@@ -80,9 +77,8 @@ python main.py
 | Argument         | Description                     | Default                                  | Example         |
 |------------------|---------------------------------|------------------------------------------|-----------------|
 | `-i, --interval` | Seconds between snapshots       | 1                                        | `-i 5`          |
-| `-d, --duration` | Total monitoring time (seconds) | Continuous                               | `-d 600`        |
+| `-d, --duration` | Total monitoring time (seconds) | None (continuous)                        | `-d 600`        |
 | `-o, --output`   | Output file path                | ./data/resource-monitor-[TIMESTAMP].csv  | `-o system.csv` |
-| `-f, --format`   | Output file format              | csv                                      | `-f json`       |
 
 ## 📋 Output Data
 
@@ -90,13 +86,24 @@ The monitor collects the following metrics:
 
 ### System Metrics
 
+- Timestamp (ISO format)
 - CPU usage percentage
-- Memory usage (total, available, used, percentage)
-- Network I/O (bytes sent/received)
+- Memory metrics:
+  - Total memory
+  - Available memory
+  - Used memory
+  - Usage percentage
+- Network I/O:
+  - Bytes sent
+  - Bytes received
 
 ### GPU Metrics
 
 - GPU name
-- GPU load percentage
-- GPU memory (total, used, free, utilization)
-- GPU temperature
+- Load percentage
+- Memory statistics:
+  - Total memory (MB)
+  - Used memory (MB)
+  - Free memory (MB)
+  - Memory utilization percentage
+- Temperature (°C)
