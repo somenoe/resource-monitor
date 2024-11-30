@@ -16,6 +16,34 @@ DEFAULT_INTERVAL = 1
 DATA_DIRECTORY = './data'
 SEPARATOR_LINE = '-' * 40
 
+def format_timestamp(timestamp_str):
+    """Convert ISO timestamp to readable local time"""
+    dt = datetime.fromisoformat(timestamp_str)
+    return dt.strftime('%Y-%m-%d %I:%M:%S %p')
+
+def format_number(value, precision=2):
+    """Format number with fixed precision and thousand separators"""
+    # Format with specified precision first
+    formatted = f"{value:.{precision}f}"
+    # Split into integer and decimal parts
+    parts = formatted.split('.')
+    # Add commas to integer part
+    parts[0] = f"{int(parts[0]):,}"
+    # Rejoin with decimal if it exists
+    return '.'.join(parts)
+
+def format_speed(bytes_per_sec):
+    """Format speed with appropriate unit and thousand separators"""
+    units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+    unit_index = 0
+    value = float(bytes_per_sec)
+
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    return f"{format_number(value)} {units[unit_index]}"
+
 class ResourceMonitor:
     def __init__(self, interval=DEFAULT_INTERVAL, duration=None, output_file=None):
         """
@@ -77,6 +105,12 @@ class ResourceMonitor:
         except:
             self.has_gpu = False
             print("No GPU detected - GPU monitoring disabled")
+
+        # Add network tracking
+        self.last_net_io = {
+            'io': psutil.net_io_counters(),
+            'time': time.time()
+        }
 
     def _collect_disk_data(self):
         """
@@ -197,15 +231,28 @@ class ResourceMonitor:
 
     def _collect_network_data(self):
         """
-        Collect network I/O statistics
+        Collect network I/O statistics and calculate speeds
 
         Returns:
-            dict: Network I/O statistics
+            dict: Network I/O statistics and speeds
         """
-        net_io = psutil.net_io_counters()
+        current_net_io = psutil.net_io_counters()
+        current_time = time.time()
+        time_diff = current_time - self.last_net_io['time']
+
+        # Calculate speeds
+        upload_speed = max(0, (current_net_io.bytes_sent - self.last_net_io['io'].bytes_sent) / time_diff)
+        download_speed = max(0, (current_net_io.bytes_recv - self.last_net_io['io'].bytes_recv) / time_diff)
+
+        # Update last values
+        self.last_net_io['io'] = current_net_io
+        self.last_net_io['time'] = current_time
+
         return {
-            'net_bytes_sent': net_io.bytes_sent,
-            'net_bytes_recv': net_io.bytes_recv
+            'net_bytes_sent': current_net_io.bytes_sent,
+            'net_bytes_recv': current_net_io.bytes_recv,
+            'net_speed_up': upload_speed,
+            'net_speed_down': download_speed
         }
 
     def _collect_gpu_data(self):
@@ -260,26 +307,26 @@ class ResourceMonitor:
         self._clear_last_output()
 
         lines = []
-        lines.append(f"Timestamp: {data['timestamp']}")
-        lines.append(f"CPU Usage: {data['cpu_percent']}%")
-        lines.append(f"Memory Used: {data['memory_used'] / BYTES_TO_GB:.2f} GB ({data['memory_percent']}%)")
+        lines.append(f"Timestamp: {format_timestamp(data['timestamp'])}")
+        lines.append(f"CPU Usage: {data['cpu_percent']:,}%")
+        lines.append(f"Memory Used: {format_number(data['memory_used'] / BYTES_TO_GB)} GB ({data['memory_percent']:,}%)")
+        lines.append(f"Network: ↑ {format_speed(data['net_speed_up'])}, ↓ {format_speed(data['net_speed_down'])}")
         lines.append("")
         lines.append("Disk Usage:")
 
         for device, disk in data['disks'].items():
             lines.append(f"{device} ({disk['mountpoint']}, {disk['fstype']}):")
-            lines.append(f"  Usage: {disk['used'] / BYTES_TO_GB:.2f} GB / {disk['total'] / BYTES_TO_GB:.2f} GB ({disk['percent']}%)")
-            lines.append(f"  I/O: Read: {disk['read_speed'] / BYTES_TO_MB:.2f} MB/s, Write: {disk['write_speed'] / BYTES_TO_MB:.2f} MB/s")
+            lines.append(f"  Usage: {format_number(disk['used'] / BYTES_TO_GB)} GB / {format_number(disk['total'] / BYTES_TO_GB)} GB ({disk['percent']:,}%)")
+            lines.append(f"  I/O: Read: {format_speed(disk['read_speed'])}, Write: {format_speed(disk['write_speed'])}")
             lines.append("")
 
         if data['gpu_data']:
             gpu = data['gpu_data']
             lines.append(f"GPU ({gpu['name']}):")
-            lines.append(f"  Load: {gpu['load']}%")
-            lines.append(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
-            lines.append(f"  Temperature: {gpu['temperature']}°C")
+            lines.append(f"  Load: {int(gpu['load']):,}%")
+            lines.append(f"  Memory Used: {int(gpu['memory_used']):,} MB / {int(gpu['memory_total']):,} MB ({int(gpu['memory_util']):,}%)")
+            lines.append(f"  Temperature: {int(gpu['temperature']):,}°C")
 
-        # Print all lines
         print('\n'.join(lines))
         self.last_line_count = len(lines)
 
