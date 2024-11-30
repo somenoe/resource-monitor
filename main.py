@@ -7,6 +7,7 @@ import threading
 from datetime import datetime
 import GPUtil
 import os
+import sys
 
 # Constants
 BYTES_TO_GB = 1024 * 1024 * 1024
@@ -32,6 +33,8 @@ class ResourceMonitor:
         self.output_file = output_file
         self.monitoring = False
         self.data = []
+        self.stdscr = None
+        self.last_line_count = 0  # Track number of lines printed
         # Track IO for all disks
         self.last_disk_io = {}
         self.disk_map = {}
@@ -235,65 +238,77 @@ class ResourceMonitor:
             self.has_gpu = False
             return None
 
+    def _clear_screen(self):
+        """Clear the terminal screen"""
+        if os.name == 'nt':  # Windows
+            os.system('cls')
+        else:  # Unix/Linux/MacOS
+            os.system('clear')
+
+    def _clear_last_output(self):
+        """Clear previous output lines"""
+        if os.name == 'nt':
+            self._clear_screen()
+        else:
+            # Move cursor up and clear lines
+            for _ in range(self.last_line_count):
+                sys.stdout.write('\033[F')  # Move cursor up
+                sys.stdout.write('\033[K')  # Clear line
+
+    def _print_current_snapshot(self, data):
+        """Print current resource snapshot"""
+        self._clear_last_output()
+
+        lines = []
+        lines.append(f"Timestamp: {data['timestamp']}")
+        lines.append(f"CPU Usage: {data['cpu_percent']}%")
+        lines.append(f"Memory Used: {data['memory_used'] / BYTES_TO_GB:.2f} GB ({data['memory_percent']}%)")
+        lines.append("")
+        lines.append("Disk Usage:")
+
+        for device, disk in data['disks'].items():
+            lines.append(f"{device} ({disk['mountpoint']}, {disk['fstype']}):")
+            lines.append(f"  Usage: {disk['used'] / BYTES_TO_GB:.2f} GB / {disk['total'] / BYTES_TO_GB:.2f} GB ({disk['percent']}%)")
+            lines.append(f"  I/O: Read: {disk['read_speed'] / BYTES_TO_MB:.2f} MB/s, Write: {disk['write_speed'] / BYTES_TO_MB:.2f} MB/s")
+            lines.append("")
+
+        if data['gpu_data']:
+            gpu = data['gpu_data']
+            lines.append(f"GPU ({gpu['name']}):")
+            lines.append(f"  Load: {gpu['load']}%")
+            lines.append(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
+            lines.append(f"  Temperature: {gpu['temperature']}°C")
+
+        # Print all lines
+        print('\n'.join(lines))
+        self.last_line_count = len(lines)
+
     def start_monitoring(self):
-        """
-        Start monitoring system resources
-        """
+        """Start monitoring resources"""
+        print("Starting resource monitoring. Press Ctrl+C to stop.")
+        time.sleep(1)  # Give time to read the message
+        self._clear_screen()
+
         self.monitoring = True
         start_time = time.time()
 
-        print(f"Starting resource monitoring (Interval: {self.interval}s)")
-        print("Press Ctrl+C to stop monitoring early.")
-
         try:
             while self.monitoring:
-                # Collect data
                 resource_data = self._collect_resource_data()
                 self.data.append(resource_data)
-
-                # Print current snapshot
                 self._print_current_snapshot(resource_data)
 
-                # Check duration if specified
                 if self.duration and (time.time() - start_time) >= self.duration:
                     break
 
-                # Wait for next interval
                 time.sleep(self.interval)
 
         except KeyboardInterrupt:
             print("\nMonitoring stopped by user.")
-
         finally:
             self.monitoring = False
-
-            # Save data if output file is specified
             if self.output_file:
                 self._save_data()
-
-    def _print_current_snapshot(self, data):
-        """
-        Print current resource snapshot to console
-
-        :param data: Current resource data dictionary
-        """
-        print(f"Timestamp: {data['timestamp']}")
-        print(f"CPU Usage: {data['cpu_percent']}%")
-        print(f"Memory Used: {data['memory_used'] / BYTES_TO_GB:.2f} GB ({data['memory_percent']}%)")
-
-        print("\nDisk Usage:")
-        for device, disk in data['disks'].items():
-            print(f"\n{device} ({disk['mountpoint']}, {disk['fstype']}):")
-            print(f"  Usage: {disk['used'] / BYTES_TO_GB:.2f} GB / {disk['total'] / BYTES_TO_GB:.2f} GB ({disk['percent']}%)")
-            print(f"  I/O: Read: {disk['read_speed'] / BYTES_TO_MB:.2f} MB/s, Write: {disk['write_speed'] / BYTES_TO_MB:.2f} MB/s")
-
-        if data['gpu_data']:
-            gpu = data['gpu_data']
-            print(f"\nGPU ({gpu['name']}):")
-            print(f"  Load: {gpu['load']}%")
-            print(f"  Memory Used: {gpu['memory_used']} MB / {gpu['memory_total']} MB ({gpu['memory_util']}%)")
-            print(f"  Temperature: {gpu['temperature']}°C")
-        print(SEPARATOR_LINE)
 
     def _save_data(self):
         """
