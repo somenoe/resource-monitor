@@ -1,243 +1,43 @@
-import psutil
-import time
-import csv
-from datetime import datetime
-import GPUtil
 import os
 import sys
-from select import select
-from utils import *
-
-if os.name == 'nt':  # Windows
-    import msvcrt
+import time
+import psutil
+import msvcrt
+import csv
+from datetime import datetime
+from collectors.cpu_memory import collect_memory_data
+from collectors.disk import DiskCollector
+from collectors.gpu import GPUCollector
+from collectors.network import NetworkCollector
+from utils.display import ScreenManager
+from utils.csv_export import DataExporter
+from utils.formatters import *
 
 class ResourceMonitor:
     def __init__(self, interval=DEFAULT_INTERVAL, duration=None, output_file=None):
-        """
-        Initialize the Resource Monitor
-
-        Args:
-            interval (float): Seconds between each monitoring snapshot
-            duration (float, optional): Total duration to monitor in seconds
-            output_file (str, optional): Path to save the output CSV file
-
-        The monitor tracks CPU, memory, disk I/O, network, and GPU (if available) usage.
-        """
         self.interval = interval
         self.duration = duration
         self.output_file = output_file
         self.monitoring = False
         self.data = []
-        self.stdscr = None
-        self.last_line_count = 0  # Track number of lines printed
+        self.last_line_count = 0
         self.should_stop = False
-        # Track IO for all disks
-        self.last_disk_io = {}
-        self.disk_map = {}
 
-        # Get initial disk I/O counters
-        disk_io = psutil.disk_io_counters(perdisk=True)
-        print("Available disk IO counters:", list(disk_io.keys()))  # Debug print
-
-        # Map physical disks to partitions
-        for partition in psutil.disk_partitions(all=False):
-            try:
-                if os.name == 'nt':  # Windows
-                    # On Windows, map PhysicalDrive numbers to drive letters
-                    for io_name in disk_io.keys():
-                        if io_name.startswith('PhysicalDrive'):
-                            self.disk_map[partition.device] = io_name
-                            self.last_disk_io[partition.device] = {
-                                'io': disk_io[io_name],
-                                'time': time.time()
-                            }
-                            break
-                else:  # Linux/Unix
-                    # On Linux, use device name without partition number
-                    base_device = partition.device.rstrip('0123456789')
-                    device_name = base_device.split('/')[-1]
-                    if device_name in disk_io:
-                        self.disk_map[partition.device] = device_name
-                        self.last_disk_io[partition.device] = {
-                            'io': disk_io[device_name],
-                            'time': time.time()
-                        }
-            except Exception as e:
-                print(f"Error mapping disk {partition.device}: {e}")
-
-        print("Disk mapping:", self.disk_map)  # Debug print
-
-        self.has_gpu = True  # Will be set to False if GPU is not available
-        try:
-            GPUtil.getGPUs()
-        except:
-            self.has_gpu = False
-            print("No GPU detected - GPU monitoring disabled")
-
-        # Add network tracking
-        self.last_net_io = {
-            'io': psutil.net_io_counters(),
-            'time': time.time()
-        }
-
-    def _collect_disk_data(self):
-        """
-        Collect disk usage and I/O statistics for all mounted disks
-
-        Returns:
-            dict: Disk statistics including usage and I/O speeds
-        """
-        disk_data = {}
-        try:
-            current_disk_io = psutil.disk_io_counters(perdisk=True)
-        except Exception as e:
-            print(f"Error getting disk I/O counters: {str(e)}")
-            current_disk_io = {}
-        current_time = time.time()
-
-        for disk in psutil.disk_partitions(all=False):
-            disk_data[disk.device] = self._process_disk_metrics(disk, current_disk_io, current_time)
-
-        return disk_data
-
-    def _process_disk_metrics(self, disk, current_disk_io, current_time):
-        """
-        Process metrics for a single disk
-
-        Args:
-            disk: Disk partition information
-            current_disk_io: Current disk I/O counters
-            current_time: Current timestamp
-
-        Returns:
-            dict: Processed disk metrics
-        """
-        try:
-            usage = psutil.disk_usage(disk.mountpoint)
-            disk_info = {
-                'total': usage.total,
-                'used': usage.used,
-                'free': usage.free,
-                'percent': usage.percent,
-                'mountpoint': disk.mountpoint,
-                'fstype': disk.fstype,
-                'read_speed': 0,
-                'write_speed': 0
-            }
-
-            if disk.device in self.disk_map:
-                disk_info.update(
-                    self._calculate_disk_io_speeds(
-                        disk.device,
-                        current_disk_io,
-                        current_time
-                    )
-                )
-
-            return disk_info
-        except Exception as e:
-            print(f"Error processing disk {disk.device}: {str(e)}")
-            return None
-
-    def _calculate_disk_io_speeds(self, device, current_disk_io, current_time):
-        """Calculate disk I/O speeds for a given device"""
-        io_name = self.disk_map[device]
-        if io_name not in current_disk_io or device not in self.last_disk_io:
-            return {'read_speed': 0, 'write_speed': 0}
-
-        current_io = current_disk_io[io_name]
-        last_io = self.last_disk_io[device]['io']
-        io_time_diff = current_time - self.last_disk_io[device]['time']
-
-        if io_time_diff <= 0:
-            return {'read_speed': 0, 'write_speed': 0}
-
-        read_speed = max(0, (current_io.read_bytes - last_io.read_bytes) / io_time_diff)
-        write_speed = max(0, (current_io.write_bytes - last_io.write_bytes) / io_time_diff)
-
-        # Update last values
-        self.last_disk_io[device]['io'] = current_io
-        self.last_disk_io[device]['time'] = current_time
-
-        return {
-            'read_speed': read_speed,
-            'write_speed': write_speed
-        }
+        # Initialize collectors
+        self.disk_collector = DiskCollector()
+        self.gpu_collector = GPUCollector()
+        self.network_collector = NetworkCollector()
+        self.screen_manager = ScreenManager()
 
     def _collect_resource_data(self):
-        """
-        Collect current system resource data including CPU, memory, disk, network, and GPU metrics
-
-        Returns:
-            dict: Current system resource metrics
-        """
         timestamp = datetime.now().isoformat()
-
         return {
             'timestamp': timestamp,
             'cpu_percent': psutil.cpu_percent(interval=None),
-            **self._collect_memory_data(),
-            'disks': self._collect_disk_data(),
-            'gpu_data': self._collect_gpu_data()
+            **collect_memory_data(),
+            'disks': self.disk_collector.collect_data(),
+            'gpu_data': self.gpu_collector.collect_data()
         }
-
-    def _collect_memory_data(self):
-        """
-        Collect memory usage statistics
-
-        Returns:
-            dict: Memory usage statistics
-        """
-        memory = psutil.virtual_memory()
-        return {
-            'memory_total': memory.total,
-            'memory_available': memory.available,
-            'memory_used': memory.used,
-            'memory_percent': memory.percent
-        }
-
-    def _collect_network_data(self):
-        """
-        Collect network I/O statistics
-
-        Returns:
-            dict: Network I/O statistics
-        """
-        current_net_io = psutil.net_io_counters()
-        return {
-            'net_bytes_sent': current_net_io.bytes_sent,
-            'net_bytes_recv': current_net_io.bytes_recv
-        }
-
-    def _collect_gpu_data(self):
-        """
-        Collect GPU usage statistics for all available GPUs
-
-        Returns:
-            list: List of GPU usage statistics or None if GPU is not available
-        """
-        if not self.has_gpu:
-            return None
-
-        try:
-            gpus = GPUtil.getGPUs()
-            if not gpus:
-                self.has_gpu = False
-                return None
-
-            return [{
-                'index': gpu.id,
-                'name': gpu.name,
-                'load': gpu.load * 100,
-                'memory_total': gpu.memoryTotal,
-                'memory_used': gpu.memoryUsed,
-                'memory_free': gpu.memoryFree,
-                'memory_util': gpu.memoryUtil * 100,
-                'temperature': gpu.temperature
-            } for gpu in gpus]
-        except:
-            self.has_gpu = False
-            return None
 
     def _clear_screen(self):
         """Clear the terminal screen"""
