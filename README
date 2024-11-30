@@ -9,6 +9,10 @@ A powerful Python CLI tool to monitor and log system resources in real-time.
 - 📊 Monitor system resources:
   - CPU usage percentage
   - Memory metrics (total, available, used, percentage)
+  - Disk metrics:
+    - Usage (total, used, free, percentage)
+    - I/O speeds (read/write in MB/s)
+    - Mount points and filesystem types
   - Network I/O (bytes sent/received)
   - GPU metrics:
     - Name and load
@@ -82,28 +86,36 @@ python main.py
 
 ## 📋 Output Data
 
-The monitor collects the following metrics:
+The monitor collects the following metrics, saved in CSV format:
 
 ### System Metrics
 
 - Timestamp (ISO format)
 - CPU usage percentage
 - Memory metrics:
-  - Total memory
-  - Available memory
-  - Used memory
+  - Total memory (bytes)
+  - Available memory (bytes)
+  - Used memory (bytes)
   - Usage percentage
 - Network I/O:
   - Bytes sent
   - Bytes received
+- Disk metrics (per disk, e.g., C:, D:):
+  - Total space (bytes)
+  - Used space (bytes)
+  - Free space (bytes)
+  - Usage percentage
+  - Read speed (bytes/s)
+  - Write speed (bytes/s)
 
-### GPU Metrics
+### GPU Metrics (if available)
 
 - GPU name
-- Load percentage
-- Memory statistics:
-  - Total memory (MB)
-  - Used memory (MB)
-  - Free memory (MB)
-  - Memory utilization percentage
+- Load (percentage)
+- Memory total (MB)
+- Memory used (MB)
+- Memory free (MB)
+- Memory utilization (percentage)
 - Temperature (°C)
+
+> Note: Disk metrics are prefixed with `disk_[DriveLetter]_` in the CSV output
