@@ -44,6 +44,18 @@ def format_speed(bytes_per_sec):
 
     return f"{format_number(value)} {units[unit_index]}"
 
+def format_bytes(bytes_value):
+    """Format bytes with appropriate unit and thousand separators"""
+    units = ['B', 'KB', 'MB', 'GB', 'TB']
+    unit_index = 0
+    value = float(bytes_value)
+
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    return f"{format_number(value)} {units[unit_index]}"
+
 class ResourceMonitor:
     def __init__(self, interval=DEFAULT_INTERVAL, duration=None, output_file=None):
         """
@@ -210,7 +222,6 @@ class ResourceMonitor:
             'cpu_percent': psutil.cpu_percent(interval=None),
             **self._collect_memory_data(),
             'disks': self._collect_disk_data(),
-            **self._collect_network_data(),
             'gpu_data': self._collect_gpu_data()
         }
 
@@ -231,28 +242,15 @@ class ResourceMonitor:
 
     def _collect_network_data(self):
         """
-        Collect network I/O statistics and calculate speeds
+        Collect network I/O statistics
 
         Returns:
-            dict: Network I/O statistics and speeds
+            dict: Network I/O statistics
         """
         current_net_io = psutil.net_io_counters()
-        current_time = time.time()
-        time_diff = current_time - self.last_net_io['time']
-
-        # Calculate speeds
-        upload_speed = max(0, (current_net_io.bytes_sent - self.last_net_io['io'].bytes_sent) / time_diff)
-        download_speed = max(0, (current_net_io.bytes_recv - self.last_net_io['io'].bytes_recv) / time_diff)
-
-        # Update last values
-        self.last_net_io['io'] = current_net_io
-        self.last_net_io['time'] = current_time
-
         return {
             'net_bytes_sent': current_net_io.bytes_sent,
-            'net_bytes_recv': current_net_io.bytes_recv,
-            'net_speed_up': upload_speed,
-            'net_speed_down': download_speed
+            'net_bytes_recv': current_net_io.bytes_recv
         }
 
     def _collect_gpu_data(self):
@@ -310,7 +308,6 @@ class ResourceMonitor:
         lines.append(f"Timestamp: {format_timestamp(data['timestamp'])}")
         lines.append(f"CPU Usage: {data['cpu_percent']:,}%")
         lines.append(f"Memory Used: {format_number(data['memory_used'] / BYTES_TO_GB)} GB ({data['memory_percent']:,}%)")
-        lines.append(f"Network: ↑ {format_speed(data['net_speed_up'])}, ↓ {format_speed(data['net_speed_down'])}")
         lines.append("")
         lines.append("Disk Usage:")
 
@@ -384,8 +381,7 @@ class ResourceMonitor:
 
             # Create fieldnames
             fieldnames = ['timestamp', 'cpu_percent', 'memory_total', 'memory_available',
-                         'memory_used', 'memory_percent', 'net_bytes_sent', 'net_bytes_recv',
-                         'net_speed_up', 'net_speed_down']  # Added network speed fields
+                         'memory_used', 'memory_percent']
             fieldnames.extend(sorted(disk_fields))
 
             # Add GPU fields only if GPU data exists
