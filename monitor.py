@@ -13,6 +13,11 @@ from utils.display import ScreenManager
 from utils.csv_export import DataExporter
 from utils.formatters import *
 
+# Constants for formatting output
+OUTPUT_SEPARATOR = '\n'
+DISK_INDENT = '  '
+GPU_INDENT = '    '
+
 class ResourceMonitor:
     def __init__(self, interval=DEFAULT_INTERVAL, duration=None, output_file=None):
         self.interval = interval
@@ -30,9 +35,9 @@ class ResourceMonitor:
         self.screen_manager = ScreenManager()
 
     def _collect_resource_data(self):
-        timestamp = datetime.now().isoformat()
+        """Collect current snapshot of system resource usage"""
         return {
-            'timestamp': timestamp,
+            'timestamp': datetime.now().isoformat(),
             'cpu_percent': psutil.cpu_percent(interval=None),
             **collect_memory_data(),
             'disks': self.disk_collector.collect_data(),
@@ -56,32 +61,52 @@ class ResourceMonitor:
                 sys.stdout.write('\033[F')  # Move cursor up
                 sys.stdout.write('\033[K')  # Clear line
 
+    def _format_snapshot_lines(self, data):
+        """Format resource data into displayable lines"""
+        lines = [
+            f"Timestamp: {format_timestamp(data['timestamp'])}",
+            f"CPU Usage: {data['cpu_percent']:,}%",
+            f"Memory Used: {format_number(data['memory_used'] / BYTES_TO_GB)} GB ({data['memory_percent']:,}%)",
+            "",
+            "Disk Usage:"
+        ]
+
+        lines.extend(self._format_disk_lines(data['disks']))
+
+        if data['gpu_data']:
+            lines.extend(self._format_gpu_lines(data['gpu_data']))
+
+        return lines
+
+    def _format_disk_lines(self, disks):
+        """Format disk metrics into lines"""
+        lines = []
+        for device, disk in disks.items():
+            lines.extend([
+                f"{device} ({disk['mountpoint']}, {disk['fstype']}):",
+                f"{DISK_INDENT}Usage: {format_number(disk['used'] / BYTES_TO_GB)} GB / {format_number(disk['total'] / BYTES_TO_GB)} GB ({disk['percent']:,}%)",
+                f"{DISK_INDENT}I/O: Read: {format_speed(disk['read_speed'])}, Write: {format_speed(disk['write_speed'])}",
+                ""
+            ])
+        return lines
+
+    def _format_gpu_lines(self, gpu_data):
+        """Format GPU metrics into lines"""
+        lines = ["GPUs:"]
+        for gpu in gpu_data:
+            lines.extend([
+                f"{DISK_INDENT}GPU {gpu['index']} ({gpu['name']}):",
+                f"{GPU_INDENT}Load: {int(gpu['load']):,}%",
+                f"{GPU_INDENT}Memory Used: {int(gpu['memory_used']):,} MB / {int(gpu['memory_total']):,} MB ({int(gpu['memory_util']):,}%)",
+                f"{GPU_INDENT}Temperature: {int(gpu['temperature']):,}°C"
+            ])
+        return lines
+
     def _print_current_snapshot(self, data):
         """Print current resource snapshot"""
         self._clear_last_output()
-
-        lines = []
-        lines.append(f"Timestamp: {format_timestamp(data['timestamp'])}")
-        lines.append(f"CPU Usage: {data['cpu_percent']:,}%")
-        lines.append(f"Memory Used: {format_number(data['memory_used'] / BYTES_TO_GB)} GB ({data['memory_percent']:,}%)")
-        lines.append("")
-        lines.append("Disk Usage:")
-
-        for device, disk in data['disks'].items():
-            lines.append(f"{device} ({disk['mountpoint']}, {disk['fstype']}):")
-            lines.append(f"  Usage: {format_number(disk['used'] / BYTES_TO_GB)} GB / {format_number(disk['total'] / BYTES_TO_GB)} GB ({disk['percent']:,}%)")
-            lines.append(f"  I/O: Read: {format_speed(disk['read_speed'])}, Write: {format_speed(disk['write_speed'])}")
-            lines.append("")
-
-        if data['gpu_data']:
-            lines.append("GPUs:")
-            for gpu in data['gpu_data']:
-                lines.append(f"  GPU {gpu['index']} ({gpu['name']}):")
-                lines.append(f"    Load: {int(gpu['load']):,}%")
-                lines.append(f"    Memory Used: {int(gpu['memory_used']):,} MB / {int(gpu['memory_total']):,} MB ({int(gpu['memory_util']):,}%)")
-                lines.append(f"    Temperature: {int(gpu['temperature']):,}°C")
-
-        print('\n'.join(lines))
+        lines = self._format_snapshot_lines(data)
+        print(OUTPUT_SEPARATOR.join(lines))
         self.last_line_count = len(lines)
 
     def _check_for_quit(self):
@@ -144,63 +169,12 @@ class ResourceMonitor:
                 self._save_data()
 
     def _save_data(self):
-        """
-        Save collected resource data to CSV file
-        """
+        """Save collected resource data"""
         if not self.data:
             print("No data collected.")
             return
 
         try:
-            self._save_csv()
-            print(f"Data saved to {self.output_file}")
+            DataExporter.save_to_csv(self.data, self.output_file)
         except Exception as e:
             print(f"Error saving data: {e}")
-
-    def _save_csv(self):
-        """
-        Save data to CSV file
-        """
-        with open(self.output_file, 'w', newline='') as csvfile:
-            # Get all possible disk fields from the first data point
-            disk_fields = set()
-            for disk in self.data[0]['disks'].keys():
-                for metric in ['total', 'used', 'free', 'percent', 'read_speed', 'write_speed']:
-                    disk_fields.add(f"disk_{disk.replace(':', '')}_{metric}")
-
-            # Create fieldnames
-            fieldnames = ['timestamp', 'cpu_percent', 'memory_total', 'memory_available',
-                         'memory_used', 'memory_percent']
-            fieldnames.extend(sorted(disk_fields))
-
-            # Add GPU fields only if GPU data exists
-            if self.data[0]['gpu_data']:
-                gpu_metrics = ['index', 'name', 'load', 'memory_total', 'memory_used',
-                             'memory_free', 'memory_util', 'temperature']
-                gpu_count = len(self.data[0]['gpu_data'])
-                for i in range(gpu_count):
-                    fieldnames.extend([f'gpu{i}_{key}' for key in gpu_metrics])
-
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-
-            for row in self.data:
-                row_data = {
-                    key: row[key] for key in row
-                    if key not in ['disks', 'gpu_data']
-                }
-
-                # Add disk data
-                for disk, disk_data in row['disks'].items():
-                    disk_key = disk.replace(':', '')
-                    for metric, value in disk_data.items():
-                        if metric not in ['mountpoint', 'fstype']:
-                            row_data[f'disk_{disk_key}_{metric}'] = value
-
-                # Add GPU data if available
-                if row['gpu_data']:
-                    for i, gpu in enumerate(row['gpu_data']):
-                        for key, value in gpu.items():
-                            row_data[f'gpu{i}_{key}'] = value
-
-                writer.writerow(row_data)
