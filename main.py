@@ -2,7 +2,6 @@
 import psutil
 import time
 import csv
-import json
 import argparse
 import threading
 from datetime import datetime
@@ -10,21 +9,17 @@ import GPUtil
 import os
 
 class ResourceMonitor:
-    def __init__(self, interval=1, duration=None, output_file=None, output_format='csv'):
+    def __init__(self, interval=1, duration=None, output_file=None):
         """
         Initialize the Resource Monitor
 
         :param interval: Seconds between each monitoring snapshot
         :param duration: Total duration to monitor (None for continuous)
         :param output_file: Path to save the output file
-        :param output_format: Format to save data (csv or json)
         """
         self.interval = interval
         self.duration = duration
         self.output_file = output_file
-        self.output_format = output_format
-        if output_file and output_file.lower().endswith('.json'):
-            self.output_format = 'json'
         self.monitoring = False
         self.data = []
 
@@ -123,21 +118,14 @@ class ResourceMonitor:
 
     def _save_data(self):
         """
-        Save collected resource data to file
+        Save collected resource data to CSV file
         """
         if not self.data:
             print("No data collected.")
             return
 
         try:
-            if self.output_format.lower() == 'csv':
-                self._save_csv()
-            elif self.output_format.lower() == 'json':
-                self._save_json()
-            else:
-                print(f"Unsupported format: {self.output_format}. Use 'csv' or 'json'.")
-                return
-
+            self._save_csv()
             print(f"Data saved to {self.output_file}")
         except Exception as e:
             print(f"Error saving data: {e}")
@@ -166,19 +154,11 @@ class ResourceMonitor:
                     row_data['gpu_{}'.format(key)] = value
                 writer.writerow(row_data)
 
-    def _save_json(self):
-        """
-        Save data to JSON file
-        """
-        with open(self.output_file, 'w') as jsonfile:
-            json.dump(self.data, jsonfile, indent=2)
-
 def ensure_data_directory():
     """Create data directory if it doesn't exist"""
     os.makedirs('./data', exist_ok=True)
 
 def main():
-    # Create argument parser
     parser = argparse.ArgumentParser(description='System Resource Monitor')
     parser.add_argument('-i', '--interval', type=float, default=1,
                         help='Interval between monitoring snapshots in seconds (default: 1)')
@@ -187,7 +167,6 @@ def main():
     parser.add_argument('-o', '--output',
                         help='Output file path to save monitoring data (default: ./data/resource-monitor-<timestamp>.csv)')
 
-    # Parse arguments
     args = parser.parse_args()
 
     # Create default output path if none specified
