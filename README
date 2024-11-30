@@ -9,7 +9,6 @@ A powerful Python CLI tool to monitor and log system resources in real-time.
 - 📊 Monitor system resources:
   - CPU usage
   - Memory consumption
-  - Disk usage
   - Network I/O
 - 🕒 Customizable monitoring interval
 - ⏱️ Optional time-limited monitoring
