@@ -8,6 +8,9 @@ from datetime import datetime
 import GPUtil
 import os
 import sys
+from select import select
+if os.name == 'nt':  # Windows
+    import msvcrt
 
 # Constants
 BYTES_TO_GB = 1024 * 1024 * 1024
@@ -75,6 +78,7 @@ class ResourceMonitor:
         self.data = []
         self.stdscr = None
         self.last_line_count = 0  # Track number of lines printed
+        self.should_stop = False
         # Track IO for all disks
         self.last_disk_io = {}
         self.disk_map = {}
@@ -327,12 +331,40 @@ class ResourceMonitor:
         print('\n'.join(lines))
         self.last_line_count = len(lines)
 
+    def _check_for_quit(self):
+        """Check for 'q' keypress without blocking"""
+        if os.name == 'nt':  # Windows
+            if msvcrt.kbhit():
+                key = msvcrt.getch().decode('utf-8').lower()
+                return key == 'q'
+        else:  # Unix-like
+            # Check if there's data to read from stdin
+            rlist, _, _ = select([sys.stdin], [], [], 0)
+            if rlist:
+                key = sys.stdin.read(1).lower()
+                return key == 'q'
+        return False
+
     def start_monitoring(self):
         """Start monitoring resources"""
-        print("Starting resource monitoring. Press Ctrl+C to stop.")
+        print("Starting resource monitoring. Press 'q' to stop, or Ctrl+C.")
         time.sleep(1)  # Give time to read the message
         self._clear_screen()
 
+        if os.name != 'nt':  # For Unix-like systems
+            # Set up stdin for non-blocking reads
+            import termios, tty
+            old_settings = termios.tcgetattr(sys.stdin)
+            try:
+                tty.setcbreak(sys.stdin.fileno())
+                self._monitor_loop()
+            finally:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        else:  # For Windows
+            self._monitor_loop()
+
+    def _monitor_loop(self):
+        """Main monitoring loop"""
         self.monitoring = True
         start_time = time.time()
 
@@ -342,13 +374,17 @@ class ResourceMonitor:
                 self.data.append(resource_data)
                 self._print_current_snapshot(resource_data)
 
+                if self._check_for_quit():
+                    print("\nMonitoring stopped by user ('q' pressed).")
+                    break
+
                 if self.duration and (time.time() - start_time) >= self.duration:
                     break
 
                 time.sleep(self.interval)
 
         except KeyboardInterrupt:
-            print("\nMonitoring stopped by user.")
+            print("\nMonitoring stopped by user (Ctrl+C).")
         finally:
             self.monitoring = False
             if self.output_file:
